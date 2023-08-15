@@ -1,0 +1,72 @@
+Option Explicit
+
+Const MAX_FIELD = 80
+Private sName As String
+Private sAccounts As String
+Private sLifeCycle As String
+'Private cSettings As New cTemplateField
+'Private cFields(MAX_FIELD) As New cTemplateField
+
+Property Let TemplateName(Name As String)
+sName = Name
+End Property
+
+Property Get TemplateName() As String
+TemplateName = sName
+End Property
+
+Property Let Accounts(Name As String)
+sAccounts = Name
+End Property
+
+Property Get Accounts() As String
+Accounts = sAccounts
+End Property
+
+'Property Let LifeCycle(Name As String)
+'sLifeCycle = Name
+'End Property
+
+'Property Get LifeCycle() As String
+'LifeCycle = sLifeCycle
+'End Property
+
+'Property Let Settings(TemplateSettings As String)
+'cSettings.Data = TemplateSettings
+'End Property
+
+'Property Get SettingsData() As cTemplateField
+'Set SettingsData = cSettings
+'End Property
+
+Sub UpdateField(index As Integer, Value As String)
+If index > MAX_FIELD Then
+    Debug.Print "UpdateField: Error, the index is out of range"
+    Err.Raise 9
+    Exit Sub
+End If
+cFields(index).Data = Value
+End Sub
+
+Property Get Fields(Optional index As Integer) As cTemplateField
+If index > MAX_FIELD Or index < 0 Then
+    Debug.Print "Fields: Error, the index is out of range"
+    Err.Raise 9
+    Exit Sub
+End If
+Set Fields = cFields(index)
+End Property
+
+Property Get CheckAccount(sAccount As String) As Boolean
+Dim s() As String, bF As Boolean, i As Long
+bF = False
+s = Split(UCase(sAccounts), ",")
+For i = 0 To UBound(s)
+    If s(i) = "<ALL>" Or s(i) = UCase(sAccount) Then
+        bF = True
+        Exit For
+    End If
+Next i
+CheckAccount = bF
+End Property
+
