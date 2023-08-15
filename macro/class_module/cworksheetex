@@ -1,0 +1,183 @@
+Option Explicit
+
+Enum enumCOLORROW
+    BY_COLUMN = 1
+    BY_ROW = 2
+End Enum
+
+Private ws As New Excel.Worksheet
+Private pFindResults As New Collection
+Private iTitlePos As Long
+
+Property Let TitlePosition(Title As Long)
+iTitlePos = Title
+End Property
+
+Property Get TitlePosition() As Long
+TitlePosition = iTitlePos
+End Property
+
+Property Let Worksheet(wsSheet As Excel.Worksheet)
+Set ws = wsSheet
+End Property
+
+Property Get Worksheet() As Excel.Worksheet
+Set Worksheet = ws
+End Property
+
+Property Get LastUsedIndex(Optional ColOrRow As enumCOLORROW = BY_ROW) As Long
+If ColOrRow = BY_COLUMN Then
+    LastUsedIndex = ws.UsedRange.Columns.Count
+Else: LastUsedIndex = ws.UsedRange.Rows.Count
+End If
+End Property
+
+Function FindLastRecordEx(Optional ByVal Range As Excel.Range = Nothing, Optional FindBy As enumCOLORROW = BY_COLUMN) As Long
+Dim r As Excel.Range, index As Long, i As Long, j As Long, s As String
+Dim iLast As Long
+index = 0
+If Range Is Nothing Then Set Range = ws.Cells
+If FindBy = BY_COLUMN Then
+    iLast = Range.Worksheet.UsedRange.Rows.Count
+    On Error Resume Next
+    For Each r In Range.Rows
+        s = Replace("=IF(ISERROR(MATCH(9.999999E+306,??:??)),MATCH(""*"",??:??,-1),IF(ISERROR(MATCH(""*"",??:??,-1)),MATCH(9.999999E+306,??:??),MAX(MATCH(9.999999E+306,??:??),MATCH(""*"",??:??,-1))))", "??", r.Row)
+        i = Excel.Evaluate(s)
+        If Not Err.Number Then index = IIf(index < i, i, index)
+        Err.Clear
+        'MsgBox s, , index
+        If r.Row >= iLast Then Exit For
+    Next r
+    On Error GoTo 0
+    FindLastRecordEx = IIf(index - Range.Column < 0, 0, index - Range.Column + 1)
+Else
+    iLast = Range.Worksheet.UsedRange.Columns.Count
+    On Error Resume Next
+    For Each r In Range.Columns
+        s = Replace("=IF(ISERROR(MATCH(9.999999E+306,??:??)),MATCH(""*"",??:??,-1),IF(ISERROR(MATCH(""*"",??:??,-1)),MATCH(9.999999E+306,??:??),MAX(MATCH(9.999999E+306,??:??),MATCH(""*"",??:??,-1))))", "??:??", r.Rows.Address(False, False))
+        i = Excel.Evaluate(s)
+        If Not Err.Number Then index = IIf(index < i, i, index)
+        Err.Clear
+        If r.Column >= iLast Then Exit For
+    Next r
+    On Error GoTo 0
+    FindLastRecordEx = index
+End If
+End Function
+
+Function FindLastRecord(Optional rFind As Range = Nothing, Optional byRow As enumCOLORROW = BY_ROW, Optional bIndex As Boolean = True)
+Dim iOrder As Integer
+On Error GoTo ErrHandle
+If rFind Is Nothing Then Set rFind = ws.Cells
+If ws Is Nothing Then GoTo ErrHandle
+If byRow Then
+    iOrder = xlByRows
+Else: iOrder = xlByColumns
+End If
+If Not bIndex Then
+    Set FindLastRecord = rFind.Find("*", SearchOrder:=iOrder, searchdirection:=xlPrevious)
+Else: FindLastRecord = IIf(byRow, rFind.Find("*", SearchOrder:=iOrder, searchdirection:=xlPrevious).Row - rFind.Cells(1, 1).Row + 1, rFind.Find("*", SearchOrder:=iOrder, searchdirection:=xlPrevious).Column - rFind.Cells(1, 1).Column + 1)
+End If
+Exit Function
+
+ErrHandle:
+On Error Resume Next
+rFind.Find "", , xlFormulas, xlPart, xlByRows, xlNext, False, False
+If Not bIndex Then
+    Set FindLastRecord = Nothing
+Else: FindLastRecord = 0
+End If
+End Function
+
+Property Get ColIndex(sColumnName As String) As Long
+Dim iLastCol As Long, i As Long, bF As Boolean
+ColIndex = 0
+If iTitlePos <= 0 Then
+    Debug.Print "ColIndex: Title position is not given"
+    Exit Property
+End If
+bF = False
+iLastCol = LastUsedIndex(BY_COLUMN)
+For i = 1 To iLastCol
+    If UCase(ws.Cells(iTitlePos, i).Value) = UCase(sColumnName) Then
+        bF = True
+        Exit For
+    End If
+Next i
+If bF Then ColIndex = i
+End Property
+
+Function CheckColumns(ParamArray pVar()) As Boolean
+Dim bF As Boolean, i As Long
+If iTitlePos <= 0 Then
+    Debug.Print "CheckColumns: Title position is not given"
+    CheckColumns = False
+    Exit Function
+End If
+bF = True
+For i = 0 To UBound(pVar)
+    If Me.ColIndex(CStr(pVar(i))) = 0 Then
+        bF = False
+        Debug.Print "CheckColumns: Given name not found: '" & pVar(i) & "'"
+        Exit For
+    End If
+Next i
+CheckColumns = bF
+End Function
+
+Sub Init(Worksheet As Excel.Worksheet, iTitleRow As Long)
+Me.Worksheet = Worksheet
+iTitlePos = iTitleRow
+End Sub
+
+Function Cells(iRow As Long, sColName As String, Optional TitleBased As Boolean = True) As Excel.Range
+If TitleBased And iTitlePos <= 0 Then
+    Debug.Print "Cells: Title position is not given"
+    Set Cells = Nothing
+    Exit Function
+End If
+On Error GoTo ErrHandle
+Set Cells = Me.Worksheet.Cells(IIf(TitleBased, iTitlePos, 0) + iRow, Me.ColIndex(sColName))
+Exit Function
+
+ErrHandle:
+Debug.Print "Cells: Unable to return cell reference for given criteria"
+Set Cells = Nothing
+End Function
+
+Private Sub Class_Initialize()
+iTitlePos = 0
+End Sub
+
+Property Get FindResults() As Collection
+Set FindResults = pFindResults
+End Property
+
+Function FindAll(SearchRange As Range, FindWhat As Variant, Optional LookIn As XlFindLookIn = xlValues, Optional LookAt As XlLookAt = xlWhole, _
+                Optional SearchOrder As XlSearchOrder = xlByRows, Optional MatchCase As Boolean = False) As Long
+Dim FoundCell As Range
+Dim FirstFound As Range
+Dim iFound As Long
+
+Set pFindResults = Nothing
+iFound = 0
+If FindWhat = "" Or FindWhat = "*" Then
+    Debug.Print "FindAll: Too many matched criteria"
+    FindAll = 0
+    Exit Function
+End If
+Set FoundCell = SearchRange.Find(What:=FindWhat, LookIn:=LookIn, LookAt:=LookAt, SearchOrder:=SearchOrder, MatchCase:=MatchCase)
+If Not FoundCell Is Nothing Then
+    Set FirstFound = FoundCell
+    Do While True
+        iFound = iFound + 1
+        pFindResults.Add FoundCell
+        Set FoundCell = SearchRange.FindNext(after:=FoundCell)
+        If FoundCell Is Nothing Then Exit Do
+        If (FoundCell.Address = FirstFound.Address) Then Exit Do
+    Loop
+End If
+FindAll = iFound
+End Function
+
+
