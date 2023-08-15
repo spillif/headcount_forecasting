@@ -1,0 +1,62 @@
+Option Explicit
+
+Private RawValue As String, Keys() As String, Values() As String, rFormat As Excel.Range
+Private iTotal As Integer
+
+Property Get Data() As String
+Data = RawValue
+End Property
+
+Property Get FormatCell() As Excel.Range
+Set FormatCell = rFormat
+End Property
+
+Property Let FormatCell(Cell As Excel.Range)
+Set rFormat = Cell
+End Property
+
+Property Let Data(sData As String)
+Dim s() As String, s2() As String
+Dim i As Long
+RawValue = sData
+s = Split(sData, vbLf)
+If UBound(s) <= 0 Then Exit Property
+ReDim Keys(UBound(s))
+ReDim Values(UBound(s))
+For i = 0 To UBound(s)
+    If InStr(s(i), "=") > 0 Then
+        Keys(i) = UCase(Left(s(i), InStr(s(i), "=") - 1))
+        Values(i) = Mid(s(i), InStr(s(i), "=") + 1, Len(s(i)))
+    Else
+        Keys(i) = ""
+        Values(i) = ""
+    End If
+Next i
+iTotal = i
+End Property
+
+Property Get GetSetting(Key As Variant) As String
+Dim i As Long
+' Test if given Key is string or index
+If iTotal >= 0 Then
+    If Not IsNumeric(Key) Then
+        For i = 0 To UBound(Keys)
+            If Keys(i) = UCase(Key) Then
+                GetSetting = Values(i)
+                Exit Property
+            End If
+        Next i
+    Else
+        If Key <= UBound(Keys) Then
+            GetSetting = Values(Key)
+            Exit Property
+        End If
+    End If
+End If
+GetSetting = ""
+End Property
+
+Private Sub Class_Initialize()
+iTotal = -1
+End Sub
+
